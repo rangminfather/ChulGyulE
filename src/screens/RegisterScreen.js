@@ -1,11 +1,25 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Alert, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  Alert,
+  StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
+  Modal,
+} from 'react-native';
 import { COLORS, SIZES } from '../utils/theme';
 import { generateId, ds2, normPeriod, periodList, hasCurrent, addDays, validatePeriods, saveData } from '../utils/data';
 import { KID_AVATARS, ACADEMY_ICONS, getKidAvatar, getAcadIcon } from '../assets/avatars';
 import { Card, CardTitle, FormInput, Button, DeleteBtn, Divider, ListItem, ToggleRow, DowGrid, Tag } from '../components/UIComponents';
+import Calendar from '../components/Calendar';
 
 const RegisterScreen = ({ data, setData }) => {
+  const [datePicker, setDatePicker] = useState(null);
+  const [pickerMonth, setPickerMonth] = useState(new Date());
+
   const [kidName, setKidName] = useState('');
   const [selectedAvatar, setSelectedAvatar] = useState(KID_AVATARS[0].id);
   const [acadName, setAcadName] = useState('');
@@ -128,197 +142,358 @@ const RegisterScreen = ({ data, setData }) => {
   };
 
   const toggleOngoing = (ki, ai, pid) => {
-    const newData = { ...data };
-    const p = periodList(newData, ki, ai).find(x => x.id === pid);
-    if (!p) return;
-    p.to = p.to ? null : ds2(new Date());
-    save(newData);
-  };
+  const newData = { ...data };
+  const p = periodList(newData, ki, ai).find(x => x.id === pid);
+  if (!p) return;
+  p.to = p.to ? null : ds2(new Date());
+  save(newData);
+};
+
+const openDatePicker = (kidId, acadId, periodId, field, currentValue) => {
+  const baseDate = currentValue ? new Date(`${currentValue}T00:00:00`) : new Date();
+  setPickerMonth(baseDate);
+  setDatePicker({
+    kidId,
+    acadId,
+    periodId,
+    field,
+  });
+};
+
+const closeDatePicker = () => setDatePicker(null);
+
+const setPeriodDate = (kidId, acadId, periodId, field, value) => {
+  const newData = { ...data };
+  const pp = periodList(newData, kidId, acadId).find(x => x.id === periodId);
+  if (!pp) return;
+
+  if (field === 'from') {
+    pp.from = value;
+  } else {
+    pp.to = value;
+  }
+
+  const err = validatePeriods(periodList(newData, kidId, acadId));
+  if (err) {
+    Alert.alert('날짜 오류', err);
+    return;
+  }
+
+  save(newData);
+};
+
+const handleSelectDate = (dstr) => {
+  if (!datePicker) return;
+  const { kidId, acadId, periodId, field } = datePicker;
+  setPeriodDate(kidId, acadId, periodId, field, dstr);
+  closeDatePicker();
+};
+    
+
+
+
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={100}>
-    <ScrollView style={styles.page} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-      {/* ═══ Kids ═══ */}
-      <Card borderColor={COLORS.borderWarm}>
-        <CardTitle>👶 아이 등록</CardTitle>
-        {data.kids.length === 0
-          ? <Text style={styles.emptySmall}>등록된 아이가 없습니다</Text>
-          : data.kids.map(k => (
-            <ListItem key={k.id} left={getKidAvatar(k.avatarId, 36)} right={<DeleteBtn onPress={() => delKid(k.id)} />}>
-              <Text style={{ fontWeight: '700', fontSize: 14, color: COLORS.textDark }}>{k.name}</Text>
-            </ListItem>
-          ))
-        }
-        <Divider />
-        <FormInput label="이름" placeholder="아이 이름" value={kidName} onChangeText={setKidName} />
-        <Text style={styles.sectionLabel}>아바타 선택</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
-          <View style={{ flexDirection: 'row', gap: 8, paddingVertical: 4 }}>
-            {KID_AVATARS.map(a => (
-              <TouchableOpacity
-                key={a.id}
-                style={[styles.avatarOpt, selectedAvatar === a.id && styles.avatarOptSel]}
-                onPress={() => setSelectedAvatar(a.id)}
-              >
-                {a.render(38)}
-              </TouchableOpacity>
-            ))}
-          </View>
-        </ScrollView>
-        <Button title="+ 아이 추가" onPress={addKid} variant="primary" full />
-      </Card>
-
-      {/* ═══ Academies ═══ */}
-      <Card borderColor={COLORS.borderWarm}>
-        <CardTitle>🏫 학원 등록</CardTitle>
-        {data.academies.length === 0
-          ? <Text style={styles.emptySmall}>등록된 학원이 없습니다</Text>
-          : data.academies.map(a => (
-            <ListItem key={a.id} left={getAcadIcon(a.iconId, 28)} right={<DeleteBtn onPress={() => delAcad(a.id)} />}>
-              <Text style={{ fontWeight: '700', fontSize: 13, color: COLORS.textDark }}>{a.name}</Text>
-              <View style={{ flexDirection: 'row', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
-                {a.optAbsenceMakeup && <Tag bg={COLORS.greenBg} color={COLORS.green}>결석보강</Tag>}
-                {a.optHolidayMakeup && <Tag bg={COLORS.amberBg} color={COLORS.amber}>공휴일보강</Tag>}
-                {a.optCarryOver && <Tag bg={COLORS.blueBg} color={COLORS.blue}>이월</Tag>}
-              </View>
-            </ListItem>
-          ))
-        }
-        <Divider />
-        <FormInput label="학원 이름" placeholder="학원 이름" value={acadName} onChangeText={setAcadName} />
-        <Text style={styles.sectionLabel}>아이콘 선택</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
-          <View style={{ flexDirection: 'row', gap: 8, paddingVertical: 4 }}>
-            {ACADEMY_ICONS.map(a => (
-              <TouchableOpacity
-                key={a.id}
-                style={[styles.iconOpt, selectedIcon === a.id && styles.iconOptSel]}
-                onPress={() => setSelectedIcon(a.id)}
-              >
-                {a.render(32)}
-              </TouchableOpacity>
-            ))}
-          </View>
-        </ScrollView>
-        <ToggleRow label="미출석 시 보강 인정" value={optAbsence} onToggle={() => setOptAbsence(!optAbsence)} />
-        <ToggleRow label="공휴일 휴강 시 보강" value={optHoliday} onToggle={() => setOptHoliday(!optHoliday)} />
-        <ToggleRow label="남은 보강 이월" value={optCarry} onToggle={() => setOptCarry(!optCarry)} />
-        <Button title="+ 학원 추가" onPress={addAcad} variant="primary" full style={{ marginTop: 8 }} />
-      </Card>
-
-      {/* ═══ Linking ═══ */}
-      <Card borderColor={COLORS.borderWarm}>
-        <CardTitle>🔗 아이 — 학원 연결 & 요일 설정</CardTitle>
-        <Text style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 12 }}>
-          아이별로 학원을 선택하고, 수업 요일을 설정하세요
-        </Text>
-        {(!data.kids.length || !data.academies.length) ? (
-          <Text style={styles.emptySmall}>아이와 학원을 먼저 등록하세요</Text>
-        ) : data.kids.map(k => {
-          const ka = data.kidAcademies[k.id] || {};
-          return (
-            <View key={k.id} style={styles.linkKidBlock}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                {getKidAvatar(k.avatarId, 28)}
-                <Text style={{ fontWeight: '800', fontSize: 15, color: COLORS.textDark }}>{k.name}</Text>
-              </View>
-              {data.academies.map(a => {
-                const linked = !!ka[a.id];
-                const ps = linked ? periodList(data, k.id, a.id) : [];
-                const current = linked && hasCurrent(data, k.id, a.id);
-                return (
-                  <View key={a.id} style={[styles.linkBox, linked && styles.linkBoxActive]}>
-                    <TouchableOpacity style={styles.linkHeader} onPress={() => toggleLink(k.id, a.id)}>
-                      <View style={[styles.checkbox, linked && styles.checkboxActive]}>
-                        {linked && <Text style={{ color: '#FFF', fontSize: 12 }}>✓</Text>}
-                      </View>
-                      {getAcadIcon(a.iconId, 20)}
-                      <Text style={{ fontWeight: '600', fontSize: 13, color: COLORS.textDark }}>{a.name}</Text>
-                    </TouchableOpacity>
-                    {linked && (
-                      <View style={{ marginTop: 8 }}>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                          <Tag bg={current ? COLORS.greenBg : COLORS.amberBg} color={current ? COLORS.green : COLORS.amber}>
-                            {current ? '현재 연결' : '과거 이력만'}
-                          </Tag>
-                          <Button title="+ 구간 추가" onPress={() => addPeriod(k.id, a.id)} variant="outline" small />
-                        </View>
-                        {ps.map((p, idx) => (
-                          <View key={p.id} style={[styles.periodItem, !p.to && styles.periodItemCurrent]}>
-                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                              <Text style={{ fontSize: 12, fontWeight: '700', color: COLORS.textDark }}>구간 {idx+1}</Text>
-                              <DeleteBtn onPress={() => delPeriod(k.id, a.id, p.id)} />
-                            </View>
-                            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
-                              <View style={{ flex: 1 }}>
-                                <FormInput
-                                  label="시작일"
-                                  placeholder="YYYY-MM-DD"
-                                  value={p.from || ''}
-                                  onChangeText={(val) => {
-                                    if (/^\d{4}-\d{2}-\d{2}$/.test(val) || val === '') {
-                                      const newData = { ...data };
-                                      const pp = periodList(newData, k.id, a.id).find(x => x.id === p.id);
-                                      if (pp) { pp.from = val || ds2(new Date()); save(newData); }
-                                    }
-                                  }}
-                                  onEndEditing={(e) => {
-                                    const val = e.nativeEvent.text;
-                                    if (/^\d{4}-\d{2}-\d{2}$/.test(val)) {
-                                      const newData = { ...data };
-                                      const pp = periodList(newData, k.id, a.id).find(x => x.id === p.id);
-                                      if (pp) { pp.from = val; save(newData); }
-                                    }
-                                  }}
-                                  keyboardType="numbers-and-punctuation"
-                                />
-                              </View>
-                              <View style={{ flex: 1 }}>
-                                <FormInput
-                                  label="종료일"
-                                  placeholder={!p.to ? '계속' : 'YYYY-MM-DD'}
-                                  value={p.to || ''}
-                                  editable={!!p.to}
-                                  onChangeText={(val) => {
-                                    if (/^\d{4}-\d{2}-\d{2}$/.test(val) || val === '') {
-                                      const newData = { ...data };
-                                      const pp = periodList(newData, k.id, a.id).find(x => x.id === p.id);
-                                      if (pp) { pp.to = val || null; save(newData); }
-                                    }
-                                  }}
-                                  onEndEditing={(e) => {
-                                    const val = e.nativeEvent.text;
-                                    if (/^\d{4}-\d{2}-\d{2}$/.test(val)) {
-                                      const newData = { ...data };
-                                      const pp = periodList(newData, k.id, a.id).find(x => x.id === p.id);
-                                      if (pp) { pp.to = val; save(newData); }
-                                    }
-                                  }}
-                                  keyboardType="numbers-and-punctuation"
-                                />
-                              </View>
-                            </View>
-                            <ToggleRow label="계속 (종료일 없음)" value={!p.to} onToggle={() => toggleOngoing(k.id, a.id, p.id)} />
-                            <DowGrid selected={p.dow} onToggle={(dowIdx) => toggleDow(k.id, a.id, p.id, dowIdx)} />
-                          </View>
-                        ))}
-                      </View>
-                    )}
-                  </View>
-                );
-              })}
+  <>
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={100}
+    >
+      <ScrollView
+        style={styles.page}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* ═══ Kids ═══ */}
+        <Card borderColor={COLORS.borderWarm}>
+          <CardTitle>👶 아이 등록</CardTitle>
+          {data.kids.length === 0
+            ? <Text style={styles.emptySmall}>등록된 아이가 없습니다</Text>
+            : data.kids.map(k => (
+              <ListItem key={k.id} left={getKidAvatar(k.avatarId, 36)} right={<DeleteBtn onPress={() => delKid(k.id)} />}>
+                <Text style={{ fontWeight: '700', fontSize: 14, color: COLORS.textDark }}>{k.name}</Text>
+              </ListItem>
+            ))
+          }
+          <Divider />
+          <FormInput label="이름" placeholder="아이 이름" value={kidName} onChangeText={setKidName} />
+          <Text style={styles.sectionLabel}>아바타 선택</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
+            <View style={{ flexDirection: 'row', gap: 8, paddingVertical: 4 }}>
+              {KID_AVATARS.map(a => (
+                <TouchableOpacity
+                  key={a.id}
+                  style={[styles.avatarOpt, selectedAvatar === a.id && styles.avatarOptSel]}
+                  onPress={() => setSelectedAvatar(a.id)}
+                >
+                  {a.render(38)}
+                </TouchableOpacity>
+              ))}
             </View>
-          );
-        })}
-      </Card>
+          </ScrollView>
+          <Button title="+ 아이 추가" onPress={addKid} variant="primary" full />
+        </Card>
 
-      <View style={{ height: 100 }} />
-    </ScrollView>
+        {/* ═══ Academies ═══ */}
+        <Card borderColor={COLORS.borderWarm}>
+          <CardTitle>🏫 학원 등록</CardTitle>
+          {data.academies.length === 0
+            ? <Text style={styles.emptySmall}>등록된 학원이 없습니다</Text>
+            : data.academies.map(a => (
+              <ListItem key={a.id} left={getAcadIcon(a.iconId, 28)} right={<DeleteBtn onPress={() => delAcad(a.id)} />}>
+                <Text style={{ fontWeight: '700', fontSize: 13, color: COLORS.textDark }}>{a.name}</Text>
+                <View style={{ flexDirection: 'row', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
+                  {a.optAbsenceMakeup && <Tag bg={COLORS.greenBg} color={COLORS.green}>결석보강</Tag>}
+                  {a.optHolidayMakeup && <Tag bg={COLORS.amberBg} color={COLORS.amber}>공휴일보강</Tag>}
+                  {a.optCarryOver && <Tag bg={COLORS.blueBg} color={COLORS.blue}>이월</Tag>}
+                </View>
+              </ListItem>
+            ))
+          }
+          <Divider />
+          <FormInput label="학원 이름" placeholder="학원 이름" value={acadName} onChangeText={setAcadName} />
+          <Text style={styles.sectionLabel}>아이콘 선택</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
+            <View style={{ flexDirection: 'row', gap: 8, paddingVertical: 4 }}>
+              {ACADEMY_ICONS.map(a => (
+                <TouchableOpacity
+                  key={a.id}
+                  style={[styles.iconOpt, selectedIcon === a.id && styles.iconOptSel]}
+                  onPress={() => setSelectedIcon(a.id)}
+                >
+                  {a.render(32)}
+                </TouchableOpacity>
+              ))}
+            </View>
+          </ScrollView>
+          <ToggleRow label="미출석 시 보강 인정" value={optAbsence} onToggle={() => setOptAbsence(!optAbsence)} />
+          <ToggleRow label="공휴일 휴강 시 보강" value={optHoliday} onToggle={() => setOptHoliday(!optHoliday)} />
+          <ToggleRow label="남은 보강 이월" value={optCarry} onToggle={() => setOptCarry(!optCarry)} />
+          <Button title="+ 학원 추가" onPress={addAcad} variant="primary" full style={{ marginTop: 8 }} />
+        </Card>
+
+        {/* ═══ Linking ═══ */}
+        <Card borderColor={COLORS.borderWarm}>
+          <CardTitle>🔗 아이 — 학원 연결 & 요일 설정</CardTitle>
+          <Text style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 12 }}>
+            아이별로 학원을 선택하고, 수업 요일을 설정하세요
+          </Text>
+          {(!data.kids.length || !data.academies.length) ? (
+            <Text style={styles.emptySmall}>아이와 학원을 먼저 등록하세요</Text>
+          ) : data.kids.map(k => {
+            const ka = data.kidAcademies[k.id] || {};
+            return (
+              <View key={k.id} style={styles.linkKidBlock}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                  {getKidAvatar(k.avatarId, 28)}
+                  <Text style={{ fontWeight: '800', fontSize: 15, color: COLORS.textDark }}>{k.name}</Text>
+                </View>
+                {data.academies.map(a => {
+                  const linked = !!ka[a.id];
+                  const ps = linked ? periodList(data, k.id, a.id) : [];
+                  const current = linked && hasCurrent(data, k.id, a.id);
+                  return (
+                    <View key={a.id} style={[styles.linkBox, linked && styles.linkBoxActive]}>
+                      <TouchableOpacity style={styles.linkHeader} onPress={() => toggleLink(k.id, a.id)}>
+                        <View style={[styles.checkbox, linked && styles.checkboxActive]}>
+                          {linked && <Text style={{ color: '#FFF', fontSize: 12 }}>✓</Text>}
+                        </View>
+                        {getAcadIcon(a.iconId, 20)}
+                        <Text style={{ fontWeight: '600', fontSize: 13, color: COLORS.textDark }}>{a.name}</Text>
+                      </TouchableOpacity>
+
+                      {linked && (
+                        <View style={{ marginTop: 8 }}>
+                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                            <Tag bg={current ? COLORS.greenBg : COLORS.amberBg} color={current ? COLORS.green : COLORS.amber}>
+                              {current ? '현재 연결' : '과거 이력만'}
+                            </Tag>
+                            <Button title="+ 구간 추가" onPress={() => addPeriod(k.id, a.id)} variant="outline" small />
+                          </View>
+
+                          {ps.map((p, idx) => (
+                            <View key={p.id} style={[styles.periodItem, !p.to && styles.periodItemCurrent]}>
+                              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                                <Text style={{ fontSize: 12, fontWeight: '700', color: COLORS.textDark }}>구간 {idx + 1}</Text>
+                                <DeleteBtn onPress={() => delPeriod(k.id, a.id, p.id)} />
+                              </View>
+
+                              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+                                <View style={{ flex: 1 }}>
+                                  <Text style={styles.dateLabel}>시작일</Text>
+                                  <TouchableOpacity
+                                    style={styles.dateBtn}
+                                    onPress={() => openDatePicker(k.id, a.id, p.id, 'from', p.from)}
+                                    activeOpacity={0.7}
+                                  >
+                                    <Text style={styles.dateBtnText}>{p.from || '날짜 선택'}</Text>
+                                    <Text style={styles.dateBtnIcon}>📅</Text>
+                                  </TouchableOpacity>
+                                </View>
+
+                                <View style={{ flex: 1 }}>
+                                  <Text style={styles.dateLabel}>종료일</Text>
+                                  <TouchableOpacity
+                                    style={[styles.dateBtn, !p.to && styles.dateBtnDisabled]}
+                                    onPress={() => {
+                                      if (!p.to) return;
+                                      openDatePicker(k.id, a.id, p.id, 'to', p.to);
+                                    }}
+                                    activeOpacity={0.7}
+                                    disabled={!p.to}
+                                  >
+                                    <Text style={[styles.dateBtnText, !p.to && styles.dateBtnTextDisabled]}>
+                                      {p.to || '계속'}
+                                    </Text>
+                                    <Text style={styles.dateBtnIcon}>📅</Text>
+                                  </TouchableOpacity>
+                                </View>
+                              </View>
+
+                              <ToggleRow label="계속 (종료일 없음)" value={!p.to} onToggle={() => toggleOngoing(k.id, a.id, p.id)} />
+                              <DowGrid selected={p.dow} onToggle={(dowIdx) => toggleDow(k.id, a.id, p.id, dowIdx)} />
+                            </View>
+                          ))}
+                        </View>
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
+            );
+          })}
+        </Card>
+
+        <View style={{ height: 100 }} />
+      </ScrollView>
     </KeyboardAvoidingView>
-  );
+
+    <Modal
+      visible={!!datePicker}
+      transparent
+      animationType="slide"
+      onRequestClose={closeDatePicker}
+    >
+      <View style={styles.overlay}>
+        <View style={styles.dateSheet}>
+          <View style={styles.handle} />
+
+          <View style={styles.dateSheetHeader}>
+            <Text style={styles.dateSheetTitle}>
+              {datePicker?.field === 'from' ? '시작일 선택' : '종료일 선택'}
+            </Text>
+            <TouchableOpacity onPress={closeDatePicker} style={styles.dateCloseBtn}>
+              <Text style={styles.dateCloseBtnText}>닫기</Text>
+            </TouchableOpacity>
+          </View>
+
+          <Calendar
+            year={pickerMonth.getFullYear()}
+            month={pickerMonth.getMonth()}
+            pairs={[]}
+            data={data}
+            onPrevYear={() =>
+              setPickerMonth(new Date(pickerMonth.getFullYear() - 1, pickerMonth.getMonth(), 1))
+            }
+            onPrev={() =>
+              setPickerMonth(new Date(pickerMonth.getFullYear(), pickerMonth.getMonth() - 1, 1))
+            }
+            onNext={() =>
+              setPickerMonth(new Date(pickerMonth.getFullYear(), pickerMonth.getMonth() + 1, 1))
+            }
+            onNextYear={() =>
+              setPickerMonth(new Date(pickerMonth.getFullYear() + 1, pickerMonth.getMonth(), 1))
+            }
+            onDayPress={handleSelectDate}
+          />
+        </View>
+      </View>
+    </Modal>
+  </>
+);
 };
 
 const styles = StyleSheet.create({
+  dateLabel: {
+  fontSize: 11,
+  fontWeight: '700',
+  color: COLORS.textMuted,
+  marginBottom: 6,
+  textTransform: 'uppercase',
+  letterSpacing: 1,
+  },
+  dateBtn: {
+  minHeight: 46,
+  borderWidth: 1.5,
+  borderColor: COLORS.border,
+  borderRadius: 12,
+  backgroundColor: COLORS.white,
+  paddingHorizontal: 12,
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  },
+  dateBtnDisabled: {
+  backgroundColor: COLORS.bgWarm,
+  opacity: 0.7,
+  },
+  dateBtnText: {
+  fontSize: 13,
+  color: COLORS.textDark,
+  fontWeight: '600',
+  },
+  dateBtnTextDisabled: {
+  color: COLORS.textMuted,
+  },
+  dateBtnIcon: {
+  fontSize: 16,
+  },
+  overlay: {
+  flex: 1,
+  backgroundColor: COLORS.overlay,
+  justifyContent: 'flex-end',
+  },
+  dateSheet: {
+  backgroundColor: COLORS.white,
+  borderTopLeftRadius: 24,
+  borderTopRightRadius: 24,
+  paddingTop: 10,
+  paddingHorizontal: 16,
+  paddingBottom: 24,
+  maxHeight: '78%',
+  },
+  handle: {
+  width: 46,
+  height: 5,
+  borderRadius: 3,
+  backgroundColor: COLORS.border,
+  alignSelf: 'center',
+  marginBottom: 12,
+  },
+  dateSheetHeader: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  marginBottom: 8,
+  },
+  dateSheetTitle: {
+  fontSize: 17,
+  fontWeight: '800',
+  color: COLORS.textDark,
+  },
+  dateCloseBtn: {
+  paddingHorizontal: 10,
+  paddingVertical: 6,
+  borderRadius: 10,
+  backgroundColor: COLORS.primaryPale,
+  },
+  dateCloseBtnText: {
+  color: COLORS.primaryDark,
+  fontWeight: '700',
+  fontSize: 12,
+  },
+  
   page: {
     flex: 1,
     backgroundColor: COLORS.bg,

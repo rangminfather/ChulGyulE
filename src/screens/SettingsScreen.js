@@ -38,7 +38,7 @@ const SettingsScreen = ({ data, setData }) => {
   const [backups, setBackups] = useState([]);
   const [updating, setUpdating] = useState(false);
   const [updateStatus, setUpdateStatus] = useState(null); // 'none' | 'available' | 'error'
-
+  const [pasteBackup, setPasteBackup] = useState('');
   useEffect(() => {
     loadBackups();
   }, []);
@@ -247,6 +247,50 @@ const SettingsScreen = ({ data, setData }) => {
     setHolName('');
     save(newData);
   };
+  
+
+
+
+
+  const doPasteRestore = async () => {
+  const raw = pasteBackup.trim();
+
+  if (!raw) {
+    Alert.alert('알림', '붙여넣은 백업 내용이 없습니다');
+    return;
+  }
+
+  Alert.alert(
+    '붙여넣기 복원',
+    '붙여넣은 백업 내용으로 현재 데이터를 덮어쓸까요?',
+    [
+      { text: '취소' },
+      {
+        text: '복원',
+        onPress: async () => {
+          try {
+            const result = importData(raw);
+
+            if (!result.success) {
+              Alert.alert('복원 실패', result.error || '백업 형식이 올바르지 않습니다.');
+              return;
+            }
+
+            save(result.data);
+            setPasteBackup('');
+            Alert.alert('완료', '붙여넣은 백업으로 복원되었습니다.');
+          } catch (e) {
+            Alert.alert('오류', e.message || '복원 중 오류가 발생했습니다.');
+          }
+        },
+      },
+    ]
+  );
+};
+
+
+
+
 
   const delHoliday = (date) => {
     const newData = {
@@ -324,6 +368,36 @@ const SettingsScreen = ({ data, setData }) => {
             <Button title="📤 외부 공유" onPress={doShareExport} variant="outline" full />
           </View>
         </View>
+      
+      
+      <Divider />
+
+<Text style={styles.muted}>카카오톡이나 메모장에서 백업 JSON 전체를 복사해 붙여넣을 수 있어요.</Text>
+
+<FormInput
+  label="백업 붙여넣기"
+  placeholder='{"kids":[...]}'
+  value={pasteBackup}
+  onChangeText={setPasteBackup}
+  multiline
+  numberOfLines={8}
+  style={styles.pasteInput}
+/>
+
+<View style={styles.backupButtonsRow}>
+  <View style={{ flex: 1 }}>
+    <Button title="📥 붙여넣기 복원" onPress={doPasteRestore} variant="primary" full />
+  </View>
+  <View style={{ flex: 1 }}>
+    <Button title="🧹 입력 비우기" onPress={() => setPasteBackup('')} variant="outline" full />
+  </View>
+</View>
+
+
+
+
+
+
 
         {backups.length === 0 ? (
           <Text style={styles.muted}>저장된 백업이 없습니다</Text>
@@ -420,6 +494,14 @@ const SettingsScreen = ({ data, setData }) => {
 };
 
 const styles = StyleSheet.create({
+  
+  pasteInput: {
+  minHeight: 150,
+  textAlignVertical: 'top',
+  paddingTop: 12,
+  lineHeight: 20,
+  },
+  
   page: {
     flex: 1,
     backgroundColor: COLORS.bg,

@@ -96,11 +96,11 @@ export const DeleteBtn = ({ onPress }) => (
 );
 
 // ─── FORM INPUT ───
-export const FormInput = ({ label, ...props }) => (
+export const FormInput = ({ label, style, ...props }) => (
   <View style={styles.formGroup}>
     {label && <Text style={styles.formLabel}>{label}</Text>}
     <TextInput
-      style={styles.formInput}
+      style={[styles.formInput, style]}
       placeholderTextColor={COLORS.textPlaceholder}
       {...props}
     />
