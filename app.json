@@ -1,0 +1,37 @@
+{
+  "expo": {
+    "name": "출결이",
+    "slug": "chulgyule",
+    "version": "4.0.4",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "runtimeVersion": "1.0.0",
+    "updates": {
+      "url": "https://u.expo.dev/13a12e22-9428-4afc-b90c-6e271b59dee1"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.chulgyule.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#FFF9F5"
+      },
+      "package": "com.chulgyule.app"
+    },
+    "plugins": [
+      "expo-asset"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "13a12e22-9428-4afc-b90c-6e271b59dee1"
+      }
+    },
+    "owner": "rangminfathers-organization"
+  }
+}
