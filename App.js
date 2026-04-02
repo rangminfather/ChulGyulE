@@ -7,12 +7,13 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 
 import { COLORS } from './src/utils/theme';
 import { loadData } from './src/utils/data';
-import { IconCalendar, IconPlus, IconChart, IconSettings } from './src/assets/icons';
+import { IconCalendar, IconPlus, IconChart, IconSettings, IconTable } from './src/assets/icons';
 
 import MainScreen from './src/screens/MainScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
 import StatsScreen from './src/screens/StatsScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
+import TimetableScreen from './src/screens/TimetableScreen';
 
 const Tab = createBottomTabNavigator();
 
@@ -111,6 +112,7 @@ function AppContent({ data, setData }) {
           tabBarIcon: ({ color }) => {
             if (route.name === '출결') return <IconCalendar size={22} color={color} />;
             if (route.name === '등록') return <IconPlus size={22} color={color} />;
+            if (route.name === '시간표') return <IconTable size={22} color={color} />;
             if (route.name === '통계') return <IconChart size={22} color={color} />;
             if (route.name === '설정') return <IconSettings size={22} color={color} />;
           },
@@ -126,6 +128,9 @@ function AppContent({ data, setData }) {
         </Tab.Screen>
         <Tab.Screen name="등록">
           {(props) => <RegisterScreen {...props} data={data} setData={setData} />}
+        </Tab.Screen>
+        <Tab.Screen name="시간표">
+          {(props) => <TimetableScreen {...props} data={data} setData={setData} />}
         </Tab.Screen>
         <Tab.Screen name="통계">
           {(props) => <StatsScreen {...props} data={data} setData={setData} />}

@@ -30,6 +30,13 @@ export const IconChart = ({ size=24, color='#C4B5A9' }) => (
   </Svg>
 );
 
+export const IconTable = ({ size=24, color='#C4B5A9' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Rect x="3" y="5" width="18" height="14" rx="2.5" stroke={color} strokeWidth="1.8" />
+    <Path d="M3 10h18M8 5v14M16 5v14" stroke={color} strokeWidth="1.8" />
+  </Svg>
+);
+
 export const IconSettings = ({ size=24, color='#C4B5A9' }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
     <Circle cx="12" cy="12" r="3" stroke={color} strokeWidth="1.8" />

@@ -13,6 +13,25 @@ for (let y = 2024; y <= 2030; y++) {
 
 // ─── DEFAULT DATA ───
 const uid = () => Math.random().toString(36).substr(2, 9);
+const EMPTY_DAY_TIME = { start: '', end: '' };
+
+export const TIME_OPTIONS = Array.from({ length: 36 }, (_, idx) => {
+  const totalMinutes = (6 * 60) + (idx * 30);
+  const hours = String(Math.floor(totalMinutes / 60)).padStart(2, '0');
+  const minutes = String(totalMinutes % 60).padStart(2, '0');
+  return `${hours}:${minutes}`;
+});
+
+export const createDayTime = (value = {}) => ({
+  start: typeof value.start === 'string' ? value.start : '',
+  end: typeof value.end === 'string' ? value.end : '',
+});
+
+export const createWeeklyTimes = (value = {}) => {
+  const next = {};
+  for (let dow = 0; dow < 7; dow++) next[dow] = createDayTime(value[dow] || EMPTY_DAY_TIME);
+  return next;
+};
 
 export const createDefaultData = () => ({
   kids: [],
@@ -46,6 +65,18 @@ export const isHoliday = (s, customHolidays={}) => PH[s] || customHolidays[s];
 export const holidayName = (s, customHolidays={}) => PH[s] || customHolidays[s] || '';
 
 export const generateId = uid;
+export const formatTimeRange = (start, end) => {
+  if (start && end) return `${start} - ${end}`;
+  if (start) return `${start} -`;
+  if (end) return `- ${end}`;
+  return '시간 미설정';
+};
+
+export const timeToMinutes = (value) => {
+  if (!/^\d{2}:\d{2}$/.test(String(value || ''))) return Number.POSITIVE_INFINITY;
+  const [hh, mm] = String(value).split(':').map(Number);
+  return (hh * 60) + mm;
+};
 
 // ─── PERIOD MANAGEMENT ───
 export const normPeriod = (p) => ({
@@ -53,7 +84,19 @@ export const normPeriod = (p) => ({
   from: p.from || ds2(new Date()),
   to: p.to === undefined ? null : (p.to || null),
   dow: Array.isArray(p.dow) ? [...new Set(p.dow)].sort((a,b) => a - b) : [],
+  dayTimes: createWeeklyTimes(p.dayTimes),
 });
+
+export const getPeriodDayTime = (period, dow) => {
+  if (!period) return createDayTime();
+  return createDayTime(period.dayTimes && period.dayTimes[dow]);
+};
+
+export const setPeriodDayTime = (period, dow, nextTime) => {
+  period.dayTimes = createWeeklyTimes(period.dayTimes);
+  period.dayTimes[dow] = createDayTime(nextTime);
+  return period;
+};
 
 export const periodList = (data, kidId, acadId) => {
   const ka = data.kidAcademies[kidId];
@@ -83,6 +126,13 @@ export const getDow = (data, kidId, acadId, dateStr) => {
   return p ? p.dow : [];
 };
 
+export const getActiveTime = (data, kidId, acadId, dateStr) => {
+  const period = getActivePeriod(data, kidId, acadId, dateStr);
+  if (!period) return createDayTime();
+  const dow = new Date(`${dateStr}T00:00:00`).getDay();
+  return getPeriodDayTime(period, dow);
+};
+
 export const hasCurrent = (data, kidId, acadId) => {
   return !!getActivePeriod(data, kidId, acadId, ds2(new Date()));
 };
@@ -107,6 +157,41 @@ export const allPairs = (data, activeOnly=false) => {
 export const activePairs = (data, filter, activeOnly=false) => {
   const p = allPairs(data, activeOnly);
   return filter === 'all' ? p : p.filter(x => `${x.kid.id}_${x.acad.id}` === filter);
+};
+
+export const getWeeklyTimetable = (data, dateStr = ds2(new Date())) => {
+  const items = [];
+
+  data.kids.forEach((kid) => {
+    const links = data.kidAcademies[kid.id] || {};
+    Object.keys(links).forEach((acadId) => {
+      const acad = data.academies.find((item) => item.id === acadId);
+      const period = getActivePeriod(data, kid.id, acadId, dateStr);
+      if (!acad || !period) return;
+
+      period.dow.forEach((dow) => {
+        const time = getPeriodDayTime(period, dow);
+        items.push({
+          key: `${kid.id}_${acadId}_${dow}`,
+          dow,
+          kid,
+          acad,
+          start: time.start,
+          end: time.end,
+          sortStart: timeToMinutes(time.start),
+        });
+      });
+    });
+  });
+
+  return items.sort((a, b) => {
+    if (a.dow !== b.dow) return a.dow - b.dow;
+    if (a.sortStart !== b.sortStart) return a.sortStart - b.sortStart;
+    const endGap = timeToMinutes(a.end) - timeToMinutes(b.end);
+    if (endGap !== 0) return endGap;
+    if (a.kid.name !== b.kid.name) return a.kid.name.localeCompare(b.kid.name);
+    return a.acad.name.localeCompare(b.acad.name);
+  });
 };
 
 // ─── ATTENDANCE ───
@@ -231,6 +316,12 @@ export const importData = (jsonStr) => {
       if (!parsed.makeupCarry) parsed.makeupCarry = {};
       if (!parsed.customHolidays) parsed.customHolidays = {};
       if (!parsed.kidAcademies) parsed.kidAcademies = {};
+      Object.keys(parsed.kidAcademies).forEach(kidId => {
+        const obj = parsed.kidAcademies[kidId] || {};
+        Object.keys(obj).forEach(acadId => {
+          periodList(parsed, kidId, acadId);
+        });
+      });
       return { success: true, data: parsed };
     }
     return { success: false, error: '올바른 파일이 아닙니다' };

@@ -2,7 +2,7 @@
   "expo": {
     "name": "출결이",
     "slug": "chulgyule",
-    "version": "4.0.6",
+    "version": "4.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
