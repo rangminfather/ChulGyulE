@@ -173,7 +173,7 @@ const setPeriodDate = (kidId, acadId, periodId, field, value) => {
     pp.to = value;
   }
 
-  const err = validatePeriods(periodList(newData, kidId, acadId));
+  const err = validatePeriods(newData, kidId, acadId);
   if (err) {
     Alert.alert('날짜 오류', err);
     return;

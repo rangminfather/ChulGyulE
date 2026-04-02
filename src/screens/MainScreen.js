@@ -1,11 +1,43 @@
-import React, { useState, useCallback } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, TextInput, Alert, Dimensions } from 'react-native';
+import React, { useState, useCallback, useRef } from 'react';
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  StyleSheet,
+  Modal,
+  TextInput,
+  Alert,
+  Dimensions,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { COLORS, SIZES } from '../utils/theme';
-import { allPairs, activePairs, calcStats, DW, isHoliday, holidayName, getDow, getRecord, setRecord, saveData } from '../utils/data';
+import {
+  allPairs,
+  activePairs,
+  calcStats,
+  DW,
+  isHoliday,
+  holidayName,
+  getDow,
+  getRecord,
+  setRecord,
+  saveData,
+} from '../utils/data';
 import { getKidAvatar, getAcadIcon } from '../assets/avatars';
 import { IconBox } from '../assets/icons';
-import { Card, Tag, FilterChip, ProgressBar, StatBox, Button, Toggle, EmptyState } from '../components/UIComponents';
+import {
+  Card,
+  Tag,
+  FilterChip,
+  ProgressBar,
+  StatBox,
+  Button,
+  Toggle,
+  EmptyState,
+} from '../components/UIComponents';
 import Calendar from '../components/Calendar';
 
 const MainScreen = ({ data, setData, navigation }) => {
@@ -17,6 +49,9 @@ const MainScreen = ({ data, setData, navigation }) => {
   const [settleMemo, setSettleMemo] = useState('');
   const [kidAcadTab, setKidAcadTab] = useState({});
   const [expandedKids, setExpandedKids] = useState({});
+  const [settleManual, setSettleManual] = useState('0');
+  const [editingSettle, setEditingSettle] = useState(false);
+  const settleScrollRef = useRef(null);
 
   useFocusEffect(useCallback(() => {}, [data]));
 
@@ -24,7 +59,10 @@ const MainScreen = ({ data, setData, navigation }) => {
 
   if (!pairs.length) {
     return (
-      <ScrollView style={styles.page} contentContainerStyle={{ flex: 1, justifyContent: 'center' }}>
+      <ScrollView
+        style={styles.page}
+        contentContainerStyle={{ flex: 1, justifyContent: 'center' }}
+      >
         <EmptyState
           icon={
             <View style={styles.emptyIcon}>
@@ -72,11 +110,78 @@ const MainScreen = ({ data, setData, navigation }) => {
     saveData(newData);
   };
 
+  const getMinSettleDelta = () => {
+    if (!settleModal) return 0;
+    return -(settleModal.balance || 0);
+  };
+
+  const clampSettleDelta = (value) => {
+    const num = Number.isFinite(value) ? value : 0;
+    const min = getMinSettleDelta();
+    return Math.max(min, num);
+  };
+
+  const formatSigned = (value) => {
+    if (value > 0) return `+${value}`;
+    if (value < 0) return `${value}`;
+    return '+0';
+  };
+
+  const sanitizeSignedNumberInput = (text) => {
+    const raw = String(text || '');
+    const sign = raw.trim().startsWith('-') ? '-' : raw.trim().startsWith('+') ? '+' : '';
+    const digits = raw.replace(/\D/g, '').slice(0, 4);
+
+    if (!digits) {
+      return sign || '';
+    }
+
+    return `${sign}${String(Number(digits))}`;
+  };
+
+  const parseSignedNumber = (text) => {
+    const raw = String(text || '').trim();
+
+    if (!raw || raw === '-' || raw === '+') {
+      return 0;
+    }
+
+    const sign = raw.startsWith('-') ? -1 : 1;
+    const digits = raw.replace(/\D/g, '');
+
+    if (!digits) return 0;
+
+    return sign * Number(digits);
+  };
+
+  const updateSettleDelta = (nextValue) => {
+    const next = clampSettleDelta(nextValue);
+    setSettleDelta(next);
+    setSettleManual(next === 0 ? '0' : String(next));
+  };
+
   const openSettle = (ki, ai) => {
     const stats = calcStats(data, y, m, ki, ai);
     setSettleModal({ kidId: ki, acadId: ai, balance: stats.balance });
     setSettleDelta(0);
     setSettleMemo('');
+    setSettleManual('0');
+    setEditingSettle(false);
+  };
+
+  const applyManualSettle = (text) => {
+    const sanitized = sanitizeSignedNumberInput(text);
+    setSettleManual(sanitized);
+
+    const parsed = clampSettleDelta(parseSignedNumber(sanitized));
+    setSettleDelta(parsed);
+  };
+
+  const finishManualEdit = () => {
+    const parsed = clampSettleDelta(parseSignedNumber(settleManual));
+    setSettleDelta(parsed);
+    setSettleManual(parsed === 0 ? '0' : String(parsed));
+    setEditingSettle(false);
   };
 
   const cancelSettle = () => {
@@ -412,91 +517,169 @@ const MainScreen = ({ data, setData, navigation }) => {
       </Modal>
 
       <Modal visible={!!settleModal} transparent animationType="slide" onRequestClose={cancelSettle}>
-        <View style={styles.overlay}>
-          <View style={[styles.sheet, { paddingBottom: 40 }]}>
+        <KeyboardAvoidingView
+          style={styles.overlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
+        >
+          <View style={[styles.sheet, styles.settleSheet]}>
             <View style={styles.handle} />
-            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-              <View style={styles.settleHeader}>
-                <Text style={styles.sheetTitle}>⚖️ 보강 정산</Text>
-                <TouchableOpacity onPress={cancelSettle} style={styles.cancelBtn}>
-                  <Text style={styles.cancelBtnText}>취소</Text>
-                </TouchableOpacity>
-              </View>
 
+            <View style={styles.sheetHeader}>
+              <Text style={styles.sheetTitle}>⚖️ 보강 정산</Text>
+              <TouchableOpacity onPress={cancelSettle} style={styles.closePillBtn}>
+                <Text style={styles.closePillBtnText}>취소</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              ref={settleScrollRef}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={styles.settleScrollContent}
+            >
               {settleModal &&
                 (() => {
                   const kid = data.kids.find((k) => k.id === settleModal.kidId);
                   const acad = data.academies.find((a) => a.id === settleModal.acadId);
-                  const result = settleModal.balance + settleDelta;
+                  const previewBalance = (settleModal.balance || 0) + settleDelta;
 
                   return (
                     <>
-                      <View style={{ alignItems: 'center', marginBottom: 8 }}>
-                        <View style={styles.settleKidLine}>
-                          {kid && getKidAvatar(kid.avatarId, 32)}
-                          {acad && getAcadIcon(acad.iconId, 22)}
-                          <Text style={styles.settleKidText}>
+                      <View style={styles.settleTopInfo}>
+                        <View style={styles.settleKidRow}>
+                          {kid && getKidAvatar(kid.avatarId, 34)}
+                          {acad && getAcadIcon(acad.iconId, 24)}
+                          <Text style={styles.settleKidName}>
                             {kid?.name} · {acad?.name}
                           </Text>
                         </View>
-                        <Text style={styles.settleSubText}>
-                          {y}년 {m + 1}월 기준 · 현재 {settleModal.balance}건
+
+                        <Text style={styles.settleSubLine}>
+                          {y}년 {m + 1}월 기준 ·{' '}
+                          <Text style={styles.currentCountText}>현재 {settleModal.balance}건</Text>
                         </Text>
                       </View>
 
-                      <View style={styles.settleCounter}>
+                      <View style={styles.settleAdjustRow}>
                         <TouchableOpacity
-                          style={styles.settleCounterBtn}
-                          onPress={() => settleDelta > -99 && setSettleDelta(settleDelta - 1)}
+                          style={styles.settleAdjustBtnLarge}
+                          activeOpacity={0.8}
+                          onPress={() => updateSettleDelta(settleDelta - 1)}
                         >
-                          <Text style={styles.settleCounterSymbol}>−</Text>
+                          <Text style={styles.settleAdjustBtnLargeText}>－</Text>
                         </TouchableOpacity>
 
-                        <Text style={styles.settleNum}>{settleDelta >= 0 ? `+${settleDelta}` : settleDelta}</Text>
+                        <TouchableOpacity
+                          activeOpacity={0.8}
+                          onPress={() => {
+                            setEditingSettle(true);
+                            setTimeout(() => {
+                              settleScrollRef.current?.scrollTo({ y: 180, animated: true });
+                            }, 150);
+                          }}
+                          style={styles.settleNumberTap}
+                        >
+                          {editingSettle ? (
+                            <TextInput
+                              style={styles.settleManualInput}
+                              value={settleManual}
+                              onChangeText={applyManualSettle}
+                              keyboardType="numbers-and-punctuation"
+                              autoFocus
+                              maxLength={5}
+                              onBlur={finishManualEdit}
+                              onSubmitEditing={finishManualEdit}
+                              returnKeyType="done"
+                            />
+                          ) : (
+                            <Text style={styles.settleNum}>{formatSigned(settleDelta)}</Text>
+                          )}
+                        </TouchableOpacity>
 
                         <TouchableOpacity
-                          style={styles.settleCounterBtn}
-                          onPress={() => settleDelta < 99 && setSettleDelta(settleDelta + 1)}
+                          style={styles.settleAdjustBtnLarge}
+                          activeOpacity={0.8}
+                          onPress={() => updateSettleDelta(settleDelta + 1)}
                         >
-                          <Text style={styles.settleCounterSymbol}>+</Text>
+                          <Text style={styles.settleAdjustBtnLargeText}>＋</Text>
                         </TouchableOpacity>
                       </View>
 
-                      <Text style={styles.settleGuideText}>과거 누락분은 +, 이미 소진된 보강은 − 로 반영</Text>
+                      <View style={styles.quickAdjustRow}>
+                        <TouchableOpacity
+                          style={styles.quickAdjustBtn}
+                          activeOpacity={0.8}
+                          onPress={() => updateSettleDelta(settleDelta - 10)}
+                        >
+                          <Text style={styles.quickAdjustText}>-10</Text>
+                        </TouchableOpacity>
 
-                      <View style={styles.settleResult}>
-                        <Text style={styles.settleResultText}>
-                          반영 후 남은 보강:{' '}
-                          <Text style={styles.settleResultValue}>{result < 0 ? 0 : result}건</Text>
+                        <TouchableOpacity
+                          style={styles.quickAdjustBtn}
+                          activeOpacity={0.8}
+                          onPress={() => updateSettleDelta(settleDelta - 5)}
+                        >
+                          <Text style={styles.quickAdjustText}>-5</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={styles.quickAdjustBtn}
+                          activeOpacity={0.8}
+                          onPress={() => updateSettleDelta(settleDelta + 5)}
+                        >
+                          <Text style={styles.quickAdjustText}>+5</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={styles.quickAdjustBtn}
+                          activeOpacity={0.8}
+                          onPress={() => updateSettleDelta(settleDelta + 10)}
+                        >
+                          <Text style={styles.quickAdjustText}>+10</Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      <Text style={styles.settleGuideText}>
+                        보강 필요분 추가는 +, 이미 사용한 보강 차감은 −
+                      </Text>
+
+                      <View style={styles.settlePreviewBox}>
+                        <Text style={styles.settlePreviewText}>
+                          반영 후 남은 보강: <Text style={styles.settlePreviewNum}>{previewBalance}건</Text>
                         </Text>
                       </View>
 
-                      <View style={{ marginBottom: 16 }}>
-                        <Text style={styles.memoLabel}>사유 (선택)</Text>
-                        <TextInput
-                          style={styles.memoInput}
-                          placeholder="예: 과거 누락분 2회, 선생님 확인"
-                          placeholderTextColor={COLORS.textPlaceholder}
-                          value={settleMemo}
-                          onChangeText={setSettleMemo}
-                          multiline
-                        />
-                      </View>
+                      <Text style={styles.memoLabel}>사유 (선택)</Text>
+                      <TextInput
+                        style={styles.memoInput}
+                        placeholder="예: 26년 3월까지 보강 정산"
+                        placeholderTextColor={COLORS.textPlaceholder}
+                        value={settleMemo}
+                        onChangeText={setSettleMemo}
+                        multiline
+                        onFocus={() => {
+                          setTimeout(() => {
+                            settleScrollRef.current?.scrollToEnd({ animated: true });
+                          }, 180);
+                        }}
+                      />
 
-                      <View style={styles.settleButtonsRow}>
-                        <View style={{ flex: 1 }}>
-                          <Button title="취소" onPress={cancelSettle} variant="outline" full />
-                        </View>
-                        <View style={{ flex: 2 }}>
-                          <Button title="정산 확인" onPress={doSettle} variant="primary" full />
-                        </View>
+                      <View style={styles.sheetBtnRow}>
+                        <TouchableOpacity style={styles.secondaryBtn} onPress={cancelSettle} activeOpacity={0.8}>
+                          <Text style={styles.secondaryBtnText}>취소</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity style={styles.primaryBtn} onPress={doSettle} activeOpacity={0.8}>
+                          <Text style={styles.primaryBtnText}>정산 확인</Text>
+                        </TouchableOpacity>
                       </View>
                     </>
                   );
                 })()}
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </ScrollView>
   );
@@ -640,6 +823,13 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     borderBottomWidth: 0,
   },
+  settleSheet: {
+    maxHeight: '92%',
+    paddingBottom: 22,
+  },
+  settleScrollContent: {
+    paddingBottom: 28,
+  },
   handle: {
     width: 40,
     height: 4,
@@ -672,6 +862,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: COLORS.textMid,
+  },
+  closePillBtn: {
+    minWidth: 62,
+    height: 42,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    backgroundColor: '#F9E6E8',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  closePillBtnText: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#D64C55',
   },
   cancelBtn: {
     backgroundColor: COLORS.redBg,
@@ -715,99 +919,182 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: COLORS.textMid,
   },
-  settleHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  settleTopInfo: {
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 18,
   },
-  settleKidLine: {
+  settleKidRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 4,
+    marginBottom: 10,
   },
-  settleKidText: {
-    fontWeight: '700',
-    fontSize: 15,
+  settleKidName: {
+    fontSize: 17,
+    fontWeight: '900',
     color: COLORS.textDark,
   },
-  settleSubText: {
-    fontSize: 12,
+  settleSubLine: {
+    fontSize: 14,
     color: COLORS.textMuted,
+    fontWeight: '500',
   },
-  settleCounter: {
+  currentCountText: {
+    color: COLORS.primaryDark,
+    fontWeight: '900',
+    fontSize: 16,
+  },
+  settleAdjustRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 24,
-    marginVertical: 20,
+    justifyContent: 'space-between',
+    gap: 14,
+    marginTop: 8,
+    marginBottom: 18,
   },
-  settleCounterBtn: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    borderWidth: 2,
+  settleAdjustBtnLarge: {
+    width: 94,
+    height: 94,
+    borderRadius: 47,
+    borderWidth: 2.5,
     borderColor: COLORS.border,
-    backgroundColor: COLORS.bgCard,
+    backgroundColor: COLORS.white,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  settleCounterSymbol: {
-    fontSize: 26,
-    fontWeight: '700',
+  settleAdjustBtnLargeText: {
+    fontSize: 46,
+    fontWeight: '800',
     color: COLORS.textMid,
+    lineHeight: 50,
+  },
+  settleNumberTap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 94,
   },
   settleNum: {
-    fontSize: 44,
+    fontSize: 52,
     fontWeight: '900',
     color: COLORS.primary,
-    minWidth: 80,
+    minWidth: 120,
     textAlign: 'center',
+  },
+  settleManualInput: {
+    minWidth: 140,
+    textAlign: 'center',
+    fontSize: 50,
+    fontWeight: '900',
+    color: COLORS.primary,
+    paddingVertical: 8,
+  },
+  quickAdjustRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 10,
+    marginTop: -4,
+    marginBottom: 16,
+  },
+  quickAdjustBtn: {
+    minWidth: 76,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: COLORS.bgWarm,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+  },
+  quickAdjustText: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: COLORS.textMid,
   },
   settleGuideText: {
     textAlign: 'center',
-    fontSize: 12,
-    color: COLORS.textMuted,
-    marginBottom: 6,
+    fontSize: 15,
+    color: COLORS.textMid,
+    marginBottom: 14,
+    fontWeight: '800',
+    lineHeight: 22,
   },
-  settleResult: {
+  settlePreviewBox: {
     backgroundColor: COLORS.primaryPale,
-    borderRadius: 12,
-    padding: 12,
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 18,
   },
-  settleResultText: {
-    fontSize: 13,
-    fontWeight: '700',
+  settlePreviewText: {
+    fontSize: 15,
+    fontWeight: '800',
     color: COLORS.textDark,
   },
-  settleResultValue: {
+  settlePreviewNum: {
     color: COLORS.primary,
-    fontSize: 16,
+    fontSize: 18,
+    fontWeight: '900',
   },
   memoLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: COLORS.textMuted,
-    marginBottom: 6,
+    fontSize: 16,
+    fontWeight: '900',
+    color: COLORS.textMid,
+    marginBottom: 8,
   },
   memoInput: {
     backgroundColor: COLORS.bgCard,
     borderWidth: 1.5,
     borderColor: COLORS.border,
-    borderRadius: 12,
-    padding: 14,
-    fontSize: 14,
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 16,
+    fontSize: 16,
     color: COLORS.textDark,
-    minHeight: 60,
+    minHeight: 110,
     textAlignVertical: 'top',
+    marginBottom: 18,
   },
-  settleButtonsRow: {
+  sheetBtnRow: {
     flexDirection: 'row',
-    gap: 10,
-    marginBottom: 20,
+    gap: 12,
+    marginTop: 4,
+    marginBottom: 10,
+  },
+  secondaryBtn: {
+    flex: 0.8,
+    height: 62,
+    borderRadius: 18,
+    backgroundColor: COLORS.white,
+    borderWidth: 2,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  secondaryBtnText: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: COLORS.textMid,
+  },
+  primaryBtn: {
+    flex: 1.6,
+    height: 62,
+    borderRadius: 18,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
+  },
+  primaryBtnText: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: COLORS.white,
   },
 });
 
